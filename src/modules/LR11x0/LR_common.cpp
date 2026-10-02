@@ -397,7 +397,10 @@ int16_t LRxxxx::writeCommon(uint16_t cmd, uint32_t addrOffset, const uint32_t* d
     *(dataBuffPtr++) = (uint8_t)(bin & 0xFF);
   }
 
+  // under the command lock, so it is never framed with a width another thread's read has cleared
+  this->mod->hal->spiLockCommand();
   int16_t state = this->mod->SPIwriteStream(cmd, dataBuff, buffLen, true, false);
+  this->mod->hal->spiUnlockCommand();
   #if !RADIOLIB_STATIC_ONLY
     delete[] dataBuff;
   #endif

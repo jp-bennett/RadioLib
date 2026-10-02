@@ -10,9 +10,12 @@
 
 int16_t LR2021::readRadioRxFifo(uint8_t* data, size_t len) {
   // FIFO read is just a single transaction sent without the status code
+  // the cleared width is shared with every other command on this Module, as in LRxxxx::getIrqStatus()
+  this->mod->hal->spiLockCommand();
   this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_0;
   int16_t state = this->mod->SPIreadStream(RADIOLIB_LR2021_CMD_READ_RX_FIFO, data, len, true, false);
   this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_16;
+  this->mod->hal->spiUnlockCommand();
   return(state);
 }
 
