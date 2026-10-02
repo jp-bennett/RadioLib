@@ -30,10 +30,14 @@ void LRxxxx::clearPacketSentAction() {
 uint32_t LRxxxx::getIrqStatus() {
   // there is no dedicated "get IRQ" command, the IRQ bits are sent after the status bytes
   uint8_t buff[6] = { 0 };
+  // widths[STATUS] is shared with every other command on this Module, and this call does not go through
+  // SPIcommand, so without the command lock another thread's read is reframed by the cleared width.
+  this->mod->hal->spiLockCommand();
   Module::BitWidth_t statusWidth = mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS];
   this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = Module::BITS_0;
   mod->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true);
   this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_STATUS] = statusWidth;
+  this->mod->hal->spiUnlockCommand();
   uint32_t irq = ((uint32_t)(buff[2]) << 24) | ((uint32_t)(buff[3]) << 16) | ((uint32_t)(buff[4]) << 8) | (uint32_t)buff[5];
   return(irq);
 }
@@ -197,7 +201,9 @@ int16_t LRxxxx::getStatus(uint8_t* stat1, uint8_t* stat2, uint32_t* irq) {
   // the status check command doesn't return status in the same place as other read commands
   // but only as the first byte (as with any other command), hence LRxxxx::SPIcommand can't be used
   // it also seems to ignore the actual command, and just sending in bunch of NOPs will work 
+  this->mod->hal->spiLockCommand(); // never between the two halves of another thread's read
   int16_t state = this->mod->SPItransferStream(NULL, 0, false, NULL, buff, sizeof(buff), true);
+  this->mod->hal->spiUnlockCommand();
 
   // pass the replies
   if(stat1) { *stat1 = buff[0]; }
@@ -400,22 +406,27 @@ int16_t LRxxxx::writeCommon(uint16_t cmd, uint32_t addrOffset, const uint32_t* d
 
 int16_t LRxxxx::SPIcommand(uint16_t cmd, bool write, uint8_t* data, size_t len, const uint8_t* out, size_t outLen) {
   int16_t state = RADIOLIB_ERR_UNKNOWN;
+  // Hold the bus for the whole command. Each transfer below locks and unlocks on its own, and releases
+  // before waiting on BUSY, so without this another thread's command can land between the two halves of
+  // a read -- which the chip rejects, raising CMD_ERROR and leaving the reply unwritten.
+  this->mod->hal->spiLockCommand();
   if(!write) {
     // the SPI interface of LR11x0 requires two separate transactions for reading
     // send the 16-bit command
     state = this->mod->SPIwriteStream(cmd, out, outLen, true, false);
-    RADIOLIB_ASSERT(state);
-
-    // read the result without command
-    this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
-    state = this->mod->SPIreadStream(RADIOLIB_LRXXXX_CMD_NOP, data, len, true, false);
-    this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_16;
+    if(state == RADIOLIB_ERR_NONE) {
+      // read the result without command
+      this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_0;
+      state = this->mod->SPIreadStream(RADIOLIB_LRXXXX_CMD_NOP, data, len, true, false);
+      this->mod->spiConfig.widths[RADIOLIB_MODULE_SPI_WIDTH_CMD] = Module::BITS_16;
+    }
 
   } else {
     // write is just a single transaction
     state = this->mod->SPIwriteStream(cmd, data, len, true, true);
   
   }
+  this->mod->hal->spiUnlockCommand();
   
   return(state);
 }
