@@ -179,6 +179,18 @@ class RadioLibHal {
     virtual void spiEndTransaction() = 0;
 
     /*!
+      \brief Serialise a whole chip command, not just a single SPI transfer. A multi-transfer command
+      (LRxxxx reads are two transfers with a BUSY wait between them) is only atomic against other
+      threads if the bus stays held across all of it. Default implementation does nothing.
+    */
+    virtual void spiLockCommand() {}
+
+    /*!
+      \brief Release what spiLockCommand() took.
+    */
+    virtual void spiUnlockCommand() {}
+
+    /*!
       \brief SPI termination method.
     */
     virtual void spiEnd() = 0;
