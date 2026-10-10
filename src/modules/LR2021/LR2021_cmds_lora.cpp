@@ -25,9 +25,11 @@ int16_t LR2021::setLoRaModulationParams(uint8_t sf, uint8_t bw, uint8_t cr, uint
 
   uint8_t buff[] = { (uint8_t)(((sf & 0x0F) << 4) | (bw & 0x0F)), (uint8_t)(((cr & 0x0F) << 4) | this->ldrOptimize) };
   int16_t state = this->SPIcommand(RADIOLIB_LR2021_CMD_SET_LORA_MODULATION_PARAMS, true, buff, sizeof(buff));
+#if !defined(RADIOLIB_BENCH_NO_DCDC)
   if (state == RADIOLIB_ERR_NONE) {
     state = this->setDCDCworkaround();
   }
+#endif
   return(state);
 }
 

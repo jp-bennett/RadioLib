@@ -14,9 +14,11 @@ int16_t LR2021::setRfFrequency(uint32_t rfFreq) {
 int16_t LR2021::setRxPath(uint8_t rxPath, uint8_t rxBoost) {
   uint8_t buff[] = { (uint8_t)(rxPath & 0x01), (uint8_t)(rxBoost & 0x07) };
   int16_t state = this->SPIcommand(RADIOLIB_LR2021_CMD_SET_RX_PATH, true, buff, sizeof(buff));
+#if !defined(RADIOLIB_BENCH_NO_DCDC) && !defined(RADIOLIB_BENCH_NO_DCDC_RXPATH)
   if (state == RADIOLIB_ERR_NONE) {
     state = this->setDCDCworkaround();
   }
+#endif
   return(state);
 }
 
@@ -113,9 +115,11 @@ int16_t LR2021::setTxParams(int8_t txPower, uint8_t rampTime) {
 
 int16_t LR2021::setPacketType(uint8_t packetType) {
   int16_t state = this->SPIcommand(RADIOLIB_LR2021_CMD_SET_PACKET_TYPE, true, &packetType, sizeof(packetType));
+#if !defined(RADIOLIB_BENCH_NO_DCDC)
   if (state == RADIOLIB_ERR_NONE) {
     state = this->resetDCDCworkaround();
   }
+#endif
   return(state);
 }
 
